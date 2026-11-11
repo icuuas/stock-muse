@@ -3,7 +3,7 @@
 > 读这份文件的是 **Muse（Agent）**，不是人。用户只对你说了一句话：“按这个仓库的 INSTALL.md 安装”。
 > 请严格按步骤执行，**每一步都先检查、再动手、最后校验**。任何一步失败，如实告诉用户原因和下一步，不要跳过，也不要编造结果。
 >
-> 版本：`{版本}`｜仓库：`{仓库地址}`（发布时替换为真实值，如 `v0.1.0`）
+> 版本：`v0.1.0`｜仓库：`https://github.com/icuuas/stock-muse`（发布时替换为真实值，如 `v0.1.0`）
 > 数据来源均为免费或非官方接口，可能随时失效；测试结论与日期见 `docs/data-sources.md`。
 
 ## 0. 总原则
@@ -21,7 +21,7 @@
 用用户听得懂的话说明，不用术语，大意如下：
 
 > 我要做这几件事：
-> ① 从 GitHub 下载这个项目的 `{版本}` 版本（几十 KB 的脚本，只读，我会列出文件清单，你也可以先看一遍）；
+> ① 从 GitHub 下载这个项目的 `v0.1.0` 版本（几十 KB 的脚本，只读，我会列出文件清单，你也可以先看一遍）；
 > ② 检查脚本是否完整（离线跑一遍自带测试，不碰你的数据）；
 > ③ 问你 3 个问题（持仓、想收什么、偏好）；
 > ④ 在我的云电脑里建一个只有你能看的“持仓看板”，再建几个定时任务，只在开盘时段运行；
@@ -52,12 +52,12 @@ git --version        # 可选
 先检查 `~/workspace/stock-push/app/VERSION` 是否已是目标版本，是则跳过下载。否则：
 ```bash
 mkdir -p ~/workspace/stock-push
-git clone --depth 1 --branch {版本} {仓库地址}.git ~/workspace/stock-push/app
+git clone --depth 1 --branch v0.1.0 https://github.com/icuuas/stock-muse.git ~/workspace/stock-push/app
 # 没有 git 时：
-# curl -L -o /tmp/stock-push.zip {仓库地址}/archive/refs/tags/{版本}.zip，再解压成 app/
+# curl -L -o /tmp/stock-push.zip https://github.com/icuuas/stock-muse/archive/refs/tags/v0.1.0.zip，再解压成 app/
 ```
 校验：
-1. `app/VERSION` 的内容等于 `{版本}`。
+1. `app/VERSION` 的内容等于 `v0.1.0`。
 2. `app/scripts/` 下有 `common.py holdings.py quotes.py fx.py snapshot.py render.py news.py monitor.py report.py selftest.py`。
 3. 离线自带测试全部通过（用临时目录，不会碰用户数据，几秒内结束）：
    ```bash
@@ -174,7 +174,7 @@ python3 ~/workspace/stock-push/app/scripts/selftest.py
 内容模板在 `templates/`：A 持仓快照、B 信息推送、C 异动提醒、D 日报。模板只规定**内容和顺序**，排版由你按当前渠道自己调整。
 
 ## 14. 更新（只有用户明确说“更新”才做）
-1. `git ls-remote --tags {仓库地址}.git` 查有没有新 tag。没有就告诉用户已是最新。
+1. `git ls-remote --tags https://github.com/icuuas/stock-muse.git` 查有没有新 tag。没有就告诉用户已是最新。
 2. 有的话，把 `CHANGELOG.md` 里的变化告诉用户，**同意后**再下载新版本到临时目录，跑自带测试，通过后替换 `app/`。
 3. `data/`、`state/`、`secrets/` 不动。重新跑第 9 步自测，再 `cron.update` / `artifact.edit`，不新建。
 4. 更新 `.installed` 的版本号。
