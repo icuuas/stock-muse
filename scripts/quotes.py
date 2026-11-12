@@ -439,7 +439,7 @@ def _freshness(raw, sess, now):
         return "unknown"
     if sess in ("closed", "lunch"):
         return "fresh"
-    limit = {"regular": 20, "auction": 20, "closing": 30, "pre": 30, "post": 30, "night": 120}.get(sess, 20) * 60
+    limit = {"regular": 20, "auction": 20, "closing": 30, "pre": 30, "post": 30, "night": 60}.get(sess, 20) * 60  # Fix (2026-11-12): no session counts as real-time beyond 60 minutes
     return "fresh" if (now - t).total_seconds() <= limit else "stale"
 
 

@@ -102,6 +102,18 @@ def evaluate(positions, quotes, rules, st, now, weights=None, to_base=None):
         q = quotes.get(sym) or {}
         if not q.get("price") or q.get("error") or q.get("holiday_hint"):
             continue
+        # Fix (2026-11-12): never alert on a quote with no timestamp or a stale
+        # quote, and never alert when a second source disagrees by >3%. Before
+        # this gate, a Nasdaq pre-market quote with price_time=None ("time
+        # unknown") fired a +10.43% alert at a stale price while another source
+        # showed a materially different price.
+        if q.get("time_unknown") or q.get("stale"):
+            continue
+        if q.get("age_sec") is not None and q["age_sec"] > 3600:  # hard cap (2026-11-12): a quote older than 60 minutes is never used for an alert
+            continue
+        _cross = q.get("cross") or {}
+        if _cross.get("ok") and _cross.get("diff_pct") is not None and _cross["diff_pct"] > 3:
+            continue
         sd = C.session_date(q["market"], now).isoformat()
         impact = abs((q.get("day_change") or 0) * p["shares"]) * (1.0 if q["currency"] == "CNY" else (to_base.get(q["currency"]) or 1.0))
         heavy = (weights.get(sym) or 0) >= 20
@@ -258,7 +270,7 @@ def tick(market, now=None, force=False):
         return finish("throttled")
     ms.setdefault("last_run", {})[market] = C.iso(now)
 
-    quotes = Q.get_quotes([p["symbol"] for p in positions], now=now, cross=False)
+    quotes = Q.get_quotes([p["symbol"] for p in positions], now=now, cross=True)  # Fix (2026-11-12): cross-check on, so evaluate() can gate on source disagreement
     # 行情全部失败：不推空看板；连续失败 5 次发一条异常通知（6 小时内不重复）
     fs = ms.setdefault("fail_streak", {})
     if not any(q.get("price") for q in quotes.values()):
@@ -295,6 +307,21 @@ def tick(market, now=None, force=False):
                 e["reason"] = N.find_reason(e["symbol"], positions, now, prefs, feats)
             except Exception:
                 e["reason"] = None
+    # Fix (2026-11-12): at most one alert block per symbol per message. Before
+    # this, one tick could stack day_move + ext_move + pnl_vs_cost for the same
+    # stock (the same symbol appeared 3x in a single message at the same
+    # price). All triggers above are already committed to state, so suppressed
+    # ones do not leak out as a second message on the next tick.
+    if len(kept) > 1:
+        _prio = {"day_move": 0, "ext_move": 1, "price_above": 2, "price_below": 2, "pnl_vs_cost": 3}
+        _best = {}
+        for e in kept:
+            _cur = _best.get(e["symbol"])
+            if _cur is None or _prio.get(e["type"], 9) < _prio.get(_cur["type"], 9):
+                _best[e["symbol"]] = e
+        if len(_best) < len(kept):
+            C.log("alerts_deduped_per_symbol", before=len(kept), after=len(_best))
+            kept = [e for e in kept if _best.get(e["symbol"]) is e]
     for e in kept + dropped:
         e.pop("_commit", None)
     if dropped:
