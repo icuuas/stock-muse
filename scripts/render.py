@@ -101,6 +101,10 @@ def render_alert(ev, prefs, first_of_day=False):
     if ev.get("price") is not None:
         lines.append("现价 %s %s%s（%s）" % (C.fmt_price(ev["price"], cur), C.trend_icon(ev.get("pct"), scheme),
                                            C.fmt_pct(ev.get("pct"), 2), ev.get("session_label") or ""))
+    # Merged triggers for the same symbol (monitor.py attaches them as "also"):
+    # one block per symbol, the extra trigger information listed below it.
+    for _h in ev.get("also") or []:
+        lines.append("· %s" % _h)
     rs = ev.get("reason")
     lines.append("原因：%s" % ("%s（%s · %s）" % (rs["title"], _src(rs.get("source")), rs.get("time_text", ""))
                               if rs else "暂未找到明确消息"))

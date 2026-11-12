@@ -307,21 +307,45 @@ def tick(market, now=None, force=False):
                 e["reason"] = N.find_reason(e["symbol"], positions, now, prefs, feats)
             except Exception:
                 e["reason"] = None
-    # Fix (2026-11-12): at most one alert block per symbol per message. Before
-    # this, one tick could stack day_move + ext_move + pnl_vs_cost for the same
-    # stock (the same symbol appeared 3x in a single message at the same
-    # price). All triggers above are already committed to state, so suppressed
-    # ones do not leak out as a second message on the next tick.
+    # Fix (2026-11-12): merge all triggers for one symbol into a single block
+    # per message; the other triggers' information goes below it as "also"
+    # lines (rendered by render_alert), never as a second block. All triggers
+    # above are already committed to state, so merged ones do not leak out as
+    # another message on the next tick.
     if len(kept) > 1:
         _prio = {"day_move": 0, "ext_move": 1, "price_above": 2, "price_below": 2, "pnl_vs_cost": 3}
-        _best = {}
+        _groups = {}
         for e in kept:
-            _cur = _best.get(e["symbol"])
-            if _cur is None or _prio.get(e["type"], 9) < _prio.get(_cur["type"], 9):
-                _best[e["symbol"]] = e
-        if len(_best) < len(kept):
-            C.log("alerts_deduped_per_symbol", before=len(kept), after=len(_best))
-            kept = [e for e in kept if _best.get(e["symbol"]) is e]
+            _groups.setdefault(e["symbol"], []).append(e)
+        if any(len(_g) > 1 for _g in _groups.values()):
+            _merged = []
+            for e in kept:
+                _g = _groups[e["symbol"]]
+                if len(_g) == 1:
+                    _merged.append(e)
+                    continue
+                _primary = min(_g, key=lambda x: _prio.get(x["type"], 9))
+                if e is not _primary:
+                    continue
+                _pcts = set(re.findall(r"-?\d+(?:\.\d+)?%", _primary["headline"]))
+                _also = []
+                for _o in sorted(_g, key=lambda x: _prio.get(x["type"], 9)):
+                    if _o is _primary:
+                        continue
+                    # Never repeat the same move with the same percentage: in
+                    # pre/night sessions ext_move uses the same base as
+                    # day_move, so its headline is a pure duplicate (e.g. day
+                    # +16.36% and night +16.36% for the same stock).
+                    _opcts = set(re.findall(r"-?\d+(?:\.\d+)?%", _o["headline"]))
+                    if _opcts and _opcts <= _pcts:
+                        continue
+                    if _o["headline"] not in _also:
+                        _also.append(_o["headline"])
+                if _also:
+                    _primary["also"] = _also
+                _merged.append(_primary)
+            C.log("alerts_merged_per_symbol", before=len(kept), after=len(_merged))
+            kept = _merged
     for e in kept + dropped:
         e.pop("_commit", None)
     if dropped:
